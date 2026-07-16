@@ -27,7 +27,8 @@ export interface Recommendation {
 
 export interface DashboardStats {
   userCount: number;
-  categoryCounts: Record<string, number>;
+  todayPurchaseCount: number;
+  weeklyPurchaseCount: number;
   topProducts: Array<{ name: string; count: number }>;
 }
 
