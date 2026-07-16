@@ -1,8 +1,11 @@
 export interface Student {
   studentId: string;
-  passwordHash?: string;
-  googleUid?: string;
   mustChangePassword?: boolean;
+}
+
+export interface StoredUser extends Student {
+  passwordHash: string;
+  createdAt: string;
 }
 
 export interface PurchaseLog {
@@ -12,6 +15,20 @@ export interface PurchaseLog {
   category: string;
   price?: number;
   timestamp: Date;
+  studentId?: string;
+}
+
+export interface Recommendation {
+  id: string;
+  name: string;
+  supporters: string[];
+  createdAt: Date;
+}
+
+export interface DashboardStats {
+  userCount: number;
+  categoryCounts: Record<string, number>;
+  topProducts: Array<{ name: string; count: number }>;
 }
 
 export interface TuckShopProduct {
@@ -27,6 +44,7 @@ export interface TuckShopProduct {
   currentStock: number;
   calories?: number;
   isActive: boolean;
+  likedBy?: string[];
 }
 
 export interface ProductInput {

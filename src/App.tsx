@@ -1,51 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AdminDashboard from './components/AdminDashboard';
 import BottomNav, { type Tab } from './components/BottomNav';
 import Home from './components/Home';
 import MyLogs from './components/MyLogs';
 import Scanner from './components/Scanner';
-import type { ProductInput, PurchaseLog, TuckShopProduct } from './types';
-import { normalizeProductText, productSearchTerms } from './utils';
+import type { DashboardStats, ProductInput, PurchaseLog, Recommendation, StoredUser, Student, TuckShopProduct } from './types';
+import { hashPassword, normalizeProductText, productSearchTerms } from './utils';
 
-const LOGS_KEY = 'maejum-local-purchase-logs';
-const PRODUCTS_KEY = 'maejum-local-products';
-
+const KEYS = { users: 'maejum-users', session: 'maejum-session', logs: 'maejum-logs', products: 'maejum-products', recommendations: 'maejum-recommendations' };
 const demoProducts: TuckShopProduct[] = [
-  { id: 'pocari-355', name: '포카리스웨트 355ML', normalizedName: '포카리스웨트355', aliases: ['포카리', 'POCARI', '포카리 스웨트'], searchTerms: ['포카리', '포카리스웨트355', 'pocari'], category: '음료', price: 1800, stockDate: new Date(), stockQuantity: 20, currentStock: 20, calories: 95, isActive: true },
-  { id: 'choco-snack', name: '초코 과자', normalizedName: '초코과자', aliases: ['초코', '초코과자'], searchTerms: ['초코', '초코과자'], category: '과자', price: 1200, stockDate: new Date(), stockQuantity: 15, currentStock: 15, isActive: true },
+  { id: 'pocari-355', name: '포카리스웨트 355ml', normalizedName: '포카리스웨트355', aliases: ['포카리', 'POCARI'], searchTerms: ['포카리', 'pocari', '포카리스웨트355'], category: '음료', price: 1800, stockDate: new Date(), stockQuantity: 20, currentStock: 20, calories: 95, isActive: true, likedBy: [] },
+  { id: 'choco-snack', name: '초코 과자', normalizedName: '초코과자', aliases: ['초코'], searchTerms: ['초코', '초코과자'], category: '과자', price: 1200, stockDate: new Date(), stockQuantity: 15, currentStock: 15, isActive: true, likedBy: [] },
 ];
+function read<T>(key: string, fallback: T): T { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; } }
+function write(key: string, value: unknown) { localStorage.setItem(key, JSON.stringify(value)); }
 
-function readStorage<T>(key: string, fallback: T): T {
-  try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; }
+export default function App() {
+  const [tab, setTab] = useState<Tab>('home'); const [student, setStudent] = useState<Student | null>(null); const [users, setUsers] = useState<StoredUser[]>([]); const [logs, setLogs] = useState<PurchaseLog[]>([]); const [products, setProducts] = useState<TuckShopProduct[]>([]); const [recommendations, setRecommendations] = useState<Recommendation[]>([]); const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => { const storedUsers = read<StoredUser[]>(KEYS.users, []); setUsers(storedUsers); const saved = localStorage.getItem(KEYS.session); if (saved) { const user = storedUsers.find((item) => item.studentId === saved); if (user) setStudent({ studentId: user.studentId, mustChangePassword: user.mustChangePassword }); } const storedLogs = read<Array<Omit<PurchaseLog, 'timestamp'> & { timestamp: string }>>(KEYS.logs, []); setLogs(storedLogs.map((item) => ({ ...item, timestamp: new Date(item.timestamp) }))); const storedProducts = read<TuckShopProduct[]>(KEYS.products, demoProducts); setProducts(storedProducts.map((item) => ({ ...item, stockDate: new Date(item.stockDate), likedBy: item.likedBy ?? [] }))); if (!localStorage.getItem(KEYS.products)) write(KEYS.products, demoProducts); const storedRecommendations = read<Array<Omit<Recommendation, 'createdAt'> & { createdAt: string }>>(KEYS.recommendations, []); setRecommendations(storedRecommendations.map((item) => ({ ...item, createdAt: new Date(item.createdAt) }))); }, []);
+  const persistUsers = (next: StoredUser[]) => { setUsers(next); write(KEYS.users, next); };
+  const persistProducts = (next: TuckShopProduct[]) => { setProducts(next); write(KEYS.products, next); };
+  const persistLogs = (next: PurchaseLog[]) => { setLogs(next); write(KEYS.logs, next); };
+  const persistRecommendations = (next: Recommendation[]) => { setRecommendations(next); write(KEYS.recommendations, next); };
+  const login = async (studentId: string, password: string) => { if (!/^\d{5}$/.test(studentId)) throw new Error('학번은 숫자 5자리여야 합니다.'); const existing = users.find((item) => item.studentId === studentId); if (!existing) { if (password !== '1234') throw new Error('초기 비밀번호는 1234입니다.'); const user: StoredUser = { studentId, passwordHash: await hashPassword('1234'), mustChangePassword: true, createdAt: new Date().toISOString() }; persistUsers([...users, user]); setStudent({ studentId, mustChangePassword: true }); localStorage.setItem(KEYS.session, studentId); return; } if (existing.passwordHash !== await hashPassword(password)) throw new Error('비밀번호가 올바르지 않습니다.'); setStudent({ studentId, mustChangePassword: existing.mustChangePassword }); localStorage.setItem(KEYS.session, studentId); };
+  const changePassword = async (newPassword: string) => { if (!student || newPassword.length < 4) throw new Error('비밀번호는 4자리 이상이어야 합니다.'); const next = users.map((item) => item.studentId === student.studentId ? { ...item, passwordHash: '' , mustChangePassword: false } : item); const hash = await hashPassword(newPassword); const updated = next.map((item) => item.studentId === student.studentId ? { ...item, passwordHash: hash } : item); persistUsers(updated); setStudent({ ...student, mustChangePassword: false }); };
+  const logout = () => { localStorage.removeItem(KEYS.session); setStudent(null); setTab('home'); };
+  const savePurchase = async (product: TuckShopProduct) => { if (!student) throw new Error('먼저 로그인해 주세요.'); if (product.currentStock < 1) throw new Error('재고가 부족합니다.'); const log: PurchaseLog = { id: crypto.randomUUID(), productId: product.id, productName: product.name, category: product.category, price: product.price, timestamp: new Date(), studentId: student.studentId }; persistLogs([log, ...logs]); persistProducts(products.map((item) => item.id === product.id ? { ...item, currentStock: item.currentStock - 1 } : item)); };
+  const addProduct = async (input: ProductInput) => { const aliases = input.aliasesText.split(',').map((text) => text.trim()).filter(Boolean); persistProducts([...products, { id: crypto.randomUUID(), name: input.name, normalizedName: normalizeProductText(input.name), aliases, searchTerms: productSearchTerms(input.name, aliases), category: input.category, price: input.price, stockDate: new Date(`${input.stockDate}T00:00:00`), stockQuantity: input.stockQuantity, currentStock: input.stockQuantity, calories: input.calories, isActive: true, likedBy: [] }]); };
+  const restock = async (product: TuckShopProduct, amount: number) => persistProducts(products.map((item) => item.id === product.id ? { ...item, currentStock: item.currentStock + amount, stockQuantity: item.stockQuantity + amount } : item));
+  const toggleLike = async (product: TuckShopProduct) => { if (!student) throw new Error('먼저 로그인해 주세요.'); persistProducts(products.map((item) => item.id === product.id ? { ...item, likedBy: item.likedBy?.includes(student.studentId) ? item.likedBy.filter((id) => id !== student.studentId) : [...(item.likedBy ?? []), student.studentId] } : item)); };
+  const addRecommendation = async (name: string) => { if (!student) throw new Error('먼저 로그인해 주세요.'); const existing = recommendations.find((item) => item.name.toLowerCase() === name.toLowerCase()); if (existing) return toggleRecommendation(existing); persistRecommendations([{ id: crypto.randomUUID(), name, supporters: [student.studentId], createdAt: new Date() }, ...recommendations]); };
+  const toggleRecommendation = async (item: Recommendation) => { if (!student) throw new Error('먼저 로그인해 주세요.'); persistRecommendations(recommendations.map((current) => current.id === item.id ? { ...current, supporters: current.supporters.includes(student.studentId) ? current.supporters.filter((id) => id !== student.studentId) : [...current.supporters, student.studentId] } : current)); };
+  const stats = useMemo<DashboardStats>(() => { const categoryCounts: Record<string, number> = {}; const counts: Record<string, number> = {}; logs.forEach((log) => { categoryCounts[log.category] = (categoryCounts[log.category] ?? 0) + 1; counts[log.productName] = (counts[log.productName] ?? 0) + 1; }); return { userCount: users.length, categoryCounts, topProducts: Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, count]) => ({ name, count })) }; }, [logs, users]);
+  if (isAdmin) return <AdminDashboard products={products} stats={stats} onAddProduct={addProduct} onRestock={restock} onExit={() => setIsAdmin(false)} />;
+  return <main className="app-shell"><section className="app-content">{tab === 'home' && <Home student={student} recentLog={logs.find((log) => log.studentId === student?.studentId)} recommendations={recommendations} onLogin={login} onLogout={logout} onChangePassword={changePassword} onAddRecommendation={addRecommendation} onToggleRecommendation={toggleRecommendation} onOpenPurchase={() => setTab('purchase')} onEnterAdmin={() => setIsAdmin(true)} />}{tab === 'purchase' && <Scanner student={student} products={products} onSave={savePurchase} onToggleLike={toggleLike} />}{tab === 'logs' && <MyLogs logs={student ? logs.filter((log) => log.studentId === student.studentId) : []} isLoading={false} />}</section><BottomNav activeTab={tab} onChange={setTab} /></main>;
 }
-
-function App() {
-  const [tab, setTab] = useState<Tab>('home');
-  const [logs, setLogs] = useState<PurchaseLog[]>([]);
-  const [products, setProducts] = useState<TuckShopProduct[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    const storedLogs = readStorage<Array<Omit<PurchaseLog, 'timestamp'> & { timestamp: string }>>(LOGS_KEY, []);
-    setLogs(storedLogs.map((log) => ({ ...log, timestamp: new Date(log.timestamp) })));
-    const storedProducts = readStorage<TuckShopProduct[]>(PRODUCTS_KEY, demoProducts);
-    const parsedProducts = storedProducts.map((product) => ({ ...product, stockDate: new Date(product.stockDate) }));
-    setProducts(parsedProducts);
-    if (!localStorage.getItem(PRODUCTS_KEY)) localStorage.setItem(PRODUCTS_KEY, JSON.stringify(demoProducts));
-  }, []);
-
-  const persistProducts = (next: TuckShopProduct[]) => { setProducts(next); localStorage.setItem(PRODUCTS_KEY, JSON.stringify(next)); };
-  const savePurchase = async (product: TuckShopProduct) => {
-    if (product.currentStock < 1) throw new Error('재고가 부족한 상품입니다.');
-    const log: PurchaseLog = { id: crypto.randomUUID(), productId: product.id, productName: product.name, category: product.category, price: product.price, timestamp: new Date() };
-    const nextLogs = [log, ...logs];
-    setLogs(nextLogs); localStorage.setItem(LOGS_KEY, JSON.stringify(nextLogs));
-    persistProducts(products.map((item) => item.id === product.id ? { ...item, currentStock: item.currentStock - 1 } : item));
-  };
-  const addProduct = async (input: ProductInput) => { const aliases = input.aliasesText.split(',').map((alias) => alias.trim()).filter(Boolean); const product: TuckShopProduct = { id: crypto.randomUUID(), name: input.name.trim(), normalizedName: normalizeProductText(input.name), aliases, searchTerms: productSearchTerms(input.name, aliases), category: input.category, price: input.price, stockDate: new Date(`${input.stockDate}T00:00:00`), stockQuantity: input.stockQuantity, currentStock: input.stockQuantity, calories: input.calories, isActive: true }; persistProducts([...products, product]); };
-  const restockProduct = async (product: TuckShopProduct, amount: number) => persistProducts(products.map((item) => item.id === product.id ? { ...item, currentStock: item.currentStock + amount, stockQuantity: item.stockQuantity + amount } : item));
-
-  if (isAdmin) return <AdminDashboard products={products} onAddProduct={addProduct} onRestock={restockProduct} onExit={() => setIsAdmin(false)} />;
-  return <main className="app-shell"><div className="sky-orb sky-orb-one" /><div className="sky-orb sky-orb-two" /><section className="app-content">{tab === 'home' && <Home recentLog={logs[0]} onOpenPurchase={() => setTab('purchase')} onEnterAdmin={() => setIsAdmin(true)} />}{tab === 'purchase' && <Scanner products={products} onSave={savePurchase} />}{tab === 'logs' && <MyLogs logs={logs} isLoading={false} />}</section><BottomNav activeTab={tab} onChange={setTab} /></main>;
-}
-export default App;
