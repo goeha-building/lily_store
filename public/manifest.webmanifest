@@ -1,0 +1,9 @@
+{
+  "name": "매점 기록",
+  "short_name": "매점기록",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#cceffe",
+  "theme_color": "#249fc8",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -1,0 +1,9 @@
+import { useState, type FormEvent } from 'react';
+import type { PurchaseLog } from '../types';
+
+interface HomeProps { recentLog?: PurchaseLog; onOpenPurchase: () => void; onEnterAdmin: () => void; }
+export default function Home({ recentLog, onOpenPurchase, onEnterAdmin }: HomeProps) {
+  const [adminOpen, setAdminOpen] = useState(false); const [password, setPassword] = useState(''); const [error, setError] = useState('');
+  const submit = (event: FormEvent) => { event.preventDefault(); if (password === '1234') { setAdminOpen(false); onEnterAdmin(); } else setError('관리자 비밀번호가 올바르지 않습니다.'); };
+  return <div className="page-stack"><div className="hero-card"><span className="sun-badge">☀</span><p className="eyebrow">TUCK SHOP LOG</p><h1>나의 매점 기록</h1><p>로그인 없이 바로 상품을 찾아 구매 기록을 남겨 보세요.</p><button className="primary-button" onClick={onOpenPurchase}>상품 구매 기록하기 <span>→</span></button></div><section className="glass-card recent-card"><div><p className="eyebrow">최근 구매</p>{recentLog ? <><strong>{recentLog.productName}</strong><p>{recentLog.category} · {recentLog.timestamp.toLocaleString('ko-KR')}</p></> : <p>아직 기록이 없어요. 상품을 검색해 보세요!</p>}</div><span className="bubble-icon">🛍️</span></section><p className="notice">구매 기록과 상품 데이터는 현재 이 브라우저에만 저장됩니다.</p><button className="admin-link" onClick={() => { setError(''); setAdminOpen(true); }}>⚙ 관리자 전용</button>{adminOpen && <div className="modal-backdrop"><form className="success-modal admin-modal" onSubmit={submit}><p className="eyebrow">ADMIN ONLY</p><h2>관리자 모드</h2><input autoFocus type="password" inputMode="numeric" placeholder="관리자 비밀번호" value={password} onChange={(event) => setPassword(event.target.value)} />{error && <p className="form-error">{error}</p>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setAdminOpen(false)}>취소</button><button className="primary-button">확인</button></div></form></div>}</div>;
+}

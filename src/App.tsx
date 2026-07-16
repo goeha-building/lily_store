@@ -1,148 +1,51 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import cloudflareLogo from './assets/cloudflare.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useState } from 'react';
+import AdminDashboard from './components/AdminDashboard';
+import BottomNav, { type Tab } from './components/BottomNav';
+import Home from './components/Home';
+import MyLogs from './components/MyLogs';
+import Scanner from './components/Scanner';
+import type { ProductInput, PurchaseLog, TuckShopProduct } from './types';
+import { normalizeProductText, productSearchTerms } from './utils';
 
-function App() {
-  const [count, setCount] = useState(0)
-  const [name, setName] = useState('unknown')
+const LOGS_KEY = 'maejum-local-purchase-logs';
+const PRODUCTS_KEY = 'maejum-local-products';
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started with Cloudflare</h1>
-          <p>
-            Edit <code>src/App.tsx</code> or <code>worker/index.ts</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <ul style={{ display: 'flex', gap: '1rem', listStyle: 'none', padding: 0 }}>
-          <li>
-            <button
-              className="counter"
-              onClick={() => setCount((count) => count + 1)}
-            >
-              Count is {count}
-            </button>
-          </li>
-          <li>
-          <button
-            className="counter"
-            onClick={() => {
-              fetch('/api/')
-                .then((res) => res.json())
-                .then((data) => setName(data.name))
-            }}
-            aria-label='get name'
-          >
-            Name from API is: {name}
-          </button>
-          </li>
-        </ul>
+const demoProducts: TuckShopProduct[] = [
+  { id: 'pocari-355', name: '포카리스웨트 355ML', normalizedName: '포카리스웨트355', aliases: ['포카리', 'POCARI', '포카리 스웨트'], searchTerms: ['포카리', '포카리스웨트355', 'pocari'], category: '음료', price: 1800, stockDate: new Date(), stockQuantity: 20, currentStock: 20, calories: 95, isActive: true },
+  { id: 'choco-snack', name: '초코 과자', normalizedName: '초코과자', aliases: ['초코', '초코과자'], searchTerms: ['초코', '초코과자'], category: '과자', price: 1200, stockDate: new Date(), stockQuantity: 15, currentStock: 15, isActive: true },
+];
 
-
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-            <li>
-              <a href="https://workers.cloudflare.com/" target="_blank">
-                <img className="button-icon" src={cloudflareLogo} alt="" />
-                Workers Docs
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+function readStorage<T>(key: string, fallback: T): T {
+  try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; }
 }
 
-export default App
+function App() {
+  const [tab, setTab] = useState<Tab>('home');
+  const [logs, setLogs] = useState<PurchaseLog[]>([]);
+  const [products, setProducts] = useState<TuckShopProduct[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const storedLogs = readStorage<Array<Omit<PurchaseLog, 'timestamp'> & { timestamp: string }>>(LOGS_KEY, []);
+    setLogs(storedLogs.map((log) => ({ ...log, timestamp: new Date(log.timestamp) })));
+    const storedProducts = readStorage<TuckShopProduct[]>(PRODUCTS_KEY, demoProducts);
+    const parsedProducts = storedProducts.map((product) => ({ ...product, stockDate: new Date(product.stockDate) }));
+    setProducts(parsedProducts);
+    if (!localStorage.getItem(PRODUCTS_KEY)) localStorage.setItem(PRODUCTS_KEY, JSON.stringify(demoProducts));
+  }, []);
+
+  const persistProducts = (next: TuckShopProduct[]) => { setProducts(next); localStorage.setItem(PRODUCTS_KEY, JSON.stringify(next)); };
+  const savePurchase = async (product: TuckShopProduct) => {
+    if (product.currentStock < 1) throw new Error('재고가 부족한 상품입니다.');
+    const log: PurchaseLog = { id: crypto.randomUUID(), productId: product.id, productName: product.name, category: product.category, price: product.price, timestamp: new Date() };
+    const nextLogs = [log, ...logs];
+    setLogs(nextLogs); localStorage.setItem(LOGS_KEY, JSON.stringify(nextLogs));
+    persistProducts(products.map((item) => item.id === product.id ? { ...item, currentStock: item.currentStock - 1 } : item));
+  };
+  const addProduct = async (input: ProductInput) => { const aliases = input.aliasesText.split(',').map((alias) => alias.trim()).filter(Boolean); const product: TuckShopProduct = { id: crypto.randomUUID(), name: input.name.trim(), normalizedName: normalizeProductText(input.name), aliases, searchTerms: productSearchTerms(input.name, aliases), category: input.category, price: input.price, stockDate: new Date(`${input.stockDate}T00:00:00`), stockQuantity: input.stockQuantity, currentStock: input.stockQuantity, calories: input.calories, isActive: true }; persistProducts([...products, product]); };
+  const restockProduct = async (product: TuckShopProduct, amount: number) => persistProducts(products.map((item) => item.id === product.id ? { ...item, currentStock: item.currentStock + amount, stockQuantity: item.stockQuantity + amount } : item));
+
+  if (isAdmin) return <AdminDashboard products={products} onAddProduct={addProduct} onRestock={restockProduct} onExit={() => setIsAdmin(false)} />;
+  return <main className="app-shell"><div className="sky-orb sky-orb-one" /><div className="sky-orb sky-orb-two" /><section className="app-content">{tab === 'home' && <Home recentLog={logs[0]} onOpenPurchase={() => setTab('purchase')} onEnterAdmin={() => setIsAdmin(true)} />}{tab === 'purchase' && <Scanner products={products} onSave={savePurchase} />}{tab === 'logs' && <MyLogs logs={logs} isLoading={false} />}</section><BottomNav activeTab={tab} onChange={setTab} /></main>;
+}
+export default App;
