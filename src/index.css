@@ -1,5 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800;900&family=Noto+Sans+KR:wght@400;500;700;800&display=swap');
 
+.coupon-register{display:grid;gap:10px}.coupon-register input,.coupon-use-modal input{width:100%;border:1.5px solid #91d8ec;background:#ffffffbf;border-radius:14px;padding:13px;color:#145b78;outline:none}.coupon-success{margin:0;color:#268a57;font-size:13px;font-weight:700}.coupon-grid{display:grid;gap:12px}.coupon-card{display:grid;gap:7px;text-align:left;border:0;padding:21px;border-radius:22px;color:#155e7d;background:linear-gradient(135deg,#fff7bd,#aeeaf7);box-shadow:0 10px 22px #167aa630}.coupon-card small{color:#287d73;font-weight:900}.coupon-card strong{font-size:28px}.coupon-card span{font-family:monospace;letter-spacing:1px}.coupon-card em{font-size:11px;font-style:normal;color:#5e8596}.coupon-use-modal{text-align:left}.coupon-use-modal>span{margin-left:0}.coupon-input-row{display:flex;gap:8px}.coupon-total{display:block;margin-top:15px;color:#196a83}
+
 :root { font-family: 'Noto Sans KR', 'Nunito', sans-serif; color: #16516b; background: #cceffe; font-synthesis: none; text-rendering: optimizeLegibility; }
 * { box-sizing: border-box; } body { margin: 0; min-width: 320px; } button, input { font: inherit; } button { cursor: pointer; }
 .app-shell { min-height: 100svh; max-width: 680px; margin: auto; padding: 28px 18px 108px; overflow: hidden; position: relative; background: linear-gradient(160deg,#e8fbff 0%,#a9e8ff 47%,#cdf6d3 100%); }

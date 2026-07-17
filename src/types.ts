@@ -58,3 +58,27 @@ export interface ProductInput {
   stockQuantity: number;
   calories?: number;
 }
+
+export type CouponStatus = 'active' | 'registered' | 'used' | 'expired' | 'disabled';
+
+export interface Coupon {
+  id: string;
+  serialNumber: string;
+  initialAmount: number;
+  currentBalance: number;
+  expiresAt: Date;
+  isSplitable: boolean;
+  status: CouponStatus;
+  ownerUid?: string | null;
+  registeredAt?: Date;
+}
+
+export interface CouponTransaction {
+  id: string;
+  couponId: string;
+  serialNumber: string;
+  totalPrice: number;
+  balanceAfter: number;
+  createdAt: Date;
+  items: Array<{ productName: string; quantity: number; totalPrice: number }>;
+}

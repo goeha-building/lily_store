@@ -1,0 +1,24 @@
+.coupon-product-label { display: block; margin: 16px 0 8px; color: #286a82; font-size: 13px; }
+.coupon-product-list { display: grid; gap: 8px; max-height: 220px; overflow-y: auto; }
+.coupon-product-option { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; width: 100%; border: 1px solid #b9e4ee; border-radius: 13px; padding: 11px 12px; background: #f9ffff; color: #236a84; text-align: left; }
+.coupon-product-option span { font-weight: 800; }
+.coupon-product-option b { color: #197e98; font-size: 13px; }
+.coupon-product-option small { grid-column: 1 / -1; color: #7293a0; font-size: 11px; }
+.coupon-product-option.selected { border-color: #36b899; background: #dcf9ef; box-shadow: 0 0 0 2px #36b89928; }
+.coupon-quantity-label { display: grid; gap: 5px; margin-top: 14px; color: #3d778d; font-size: 12px; font-weight: 800; }
+.coupon-quantity-label input { width: 100%; border: 1px solid #a5dce9; border-radius: 10px; padding: 10px; }
+.coupon-selected-product { margin: 12px 0 0; color: #397b91; font-size: 12px; }
+
+.coupon-search-label { display: grid; gap: 6px; margin-top: 14px; color: #3d778d; font-size: 12px; font-weight: 800; }
+.coupon-search-label input { width: 100%; border: 1px solid #a5dce9; border-radius: 10px; padding: 11px; }
+.coupon-add-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; margin-top: 12px; padding: 12px; border-radius: 13px; background: #edfaff; color: #236a84; }
+.coupon-add-row strong { grid-column: 1 / -1; font-size: 13px; }
+.coupon-add-row label { display: grid; gap: 4px; color: #3d778d; font-size: 11px; font-weight: 800; }
+.coupon-add-row input { width: 82px; border: 1px solid #a5dce9; border-radius: 9px; padding: 8px; }
+.coupon-cart { margin-top: 16px; border-top: 1px solid #c5e9f0; padding-top: 13px; }
+.coupon-cart h3 { margin: 0 0 8px; color: #286a82; font-size: 13px; }
+.coupon-cart p { margin: 0; color: #7695a1; font-size: 12px; }
+.coupon-cart ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.coupon-cart li { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; border-radius: 10px; padding: 9px 10px; background: #f5fcfd; color: #286a82; font-size: 12px; }
+.coupon-cart li b { color: #197e98; }
+.coupon-cart li button { border: 0; border-radius: 50%; width: 23px; height: 23px; background: #ffe8e2; color: #b85840; font-size: 17px; line-height: 1; }

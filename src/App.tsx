@@ -7,16 +7,20 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   increment,
   onSnapshot,
+  query,
   runTransaction,
   serverTimestamp,
   setDoc,
   Timestamp,
   updateDoc,
+  where,
 } from 'firebase/firestore';
 import AdminDashboard from './components/AdminDashboard';
 import BottomNav, { type Tab } from './components/BottomNav';
+import Coupons, { type CouponCartItem } from './components/Coupons';
 import Home from './components/Home';
 import MyLogs from './components/MyLogs';
 import Scanner from './components/Scanner';
@@ -28,6 +32,8 @@ import type {
   Recommendation,
   Student,
   TuckShopProduct,
+  Coupon,
+  CouponTransaction,
 } from './types';
 import { hashPassword, normalizeProductText, productSearchTerms } from './utils';
 
@@ -67,12 +73,41 @@ function toLog(id: string, data: Record<string, unknown>, studentId?: string): P
   };
 }
 
+function toCoupon(id: string, data: Record<string, unknown>): Coupon {
+  return {
+    id,
+    serialNumber: String(data.serialNumber ?? ''),
+    initialAmount: Number(data.initialAmount ?? 0),
+    currentBalance: Number(data.currentBalance ?? 0),
+    expiresAt: asDate(data.expiresAt),
+    isSplitable: data.isSplitable === true,
+    status: (data.status ?? 'active') as Coupon['status'],
+    ownerUid: typeof data.ownerUid === 'string' ? data.ownerUid : null,
+    registeredAt: data.registeredAt ? asDate(data.registeredAt) : undefined,
+  };
+}
+
+function toCouponTransaction(id: string, data: Record<string, unknown>): CouponTransaction {
+  return {
+    id,
+    couponId: String(data.couponId ?? ''),
+    serialNumber: String(data.serialNumber ?? ''),
+    totalPrice: Number(data.totalPrice ?? 0),
+    balanceAfter: Number(data.balanceAfter ?? 0),
+    createdAt: asDate(data.createdAt),
+    items: Array.isArray(data.items) ? data.items.map((item) => ({ productName: String(item?.productName ?? ''), quantity: Number(item?.quantity ?? 0), totalPrice: Number(item?.totalPrice ?? 0) })) : [],
+  };
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>('home');
   const [student, setStudent] = useState<Student | null>(null);
   const [products, setProducts] = useState<TuckShopProduct[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [myLogs, setMyLogs] = useState<PurchaseLog[]>([]);
+  const [myCoupons, setMyCoupons] = useState<Coupon[]>([]);
+  const [allCoupons, setAllCoupons] = useState<Coupon[]>([]);
+  const [couponTransactions, setCouponTransactions] = useState<CouponTransaction[]>([]);
   const [allLogs, setAllLogs] = useState<PurchaseLog[]>([]);
   const [userCount, setUserCount] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -124,6 +159,17 @@ export default function App() {
   }, [student?.studentId]);
 
   useEffect(() => {
+    if (!student) { setMyCoupons([]); return; }
+    return onSnapshot(collection(db, 'coupons'), (snapshot) => {
+      const now = new Date();
+      setMyCoupons(snapshot.docs
+        .filter((item) => item.data().ownerUid === student.studentId && !(Array.isArray(item.data().hiddenBy) && item.data().hiddenBy.includes(student.studentId)))
+        .map((item) => toCoupon(item.id, item.data()))
+        .map((coupon) => coupon.expiresAt < now && coupon.status === 'registered' ? { ...coupon, status: 'expired' } : coupon));
+    });
+  }, [student?.studentId]);
+
+  useEffect(() => {
     if (!isAdmin) {
       setAllLogs([]);
       setUserCount(0);
@@ -140,6 +186,16 @@ export default function App() {
       unsubscribeLogs();
       unsubscribeUsers();
     };
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) { setAllCoupons([]); setCouponTransactions([]); return; }
+    return onSnapshot(collection(db, 'coupons'), (snapshot) => setAllCoupons(snapshot.docs.map((item) => toCoupon(item.id, item.data()))));
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    return onSnapshot(collection(db, 'couponTransactions'), (snapshot) => setCouponTransactions(snapshot.docs.map((item) => toCouponTransaction(item.id, item.data())).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())));
   }, [isAdmin]);
 
   const login = async (studentId: string, password: string) => {
@@ -204,6 +260,69 @@ export default function App() {
         purchasedAt: serverTimestamp(),
       });
     });
+  };
+
+  const registerCoupon = async (rawSerialNumber: string) => {
+    if (!student) throw new Error('먼저 로그인해 주세요.');
+    const serialNumber = rawSerialNumber.trim().toUpperCase();
+    if (!/^MAE-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(serialNumber)) throw new Error('MAE-XXXX-XXXX 형식의 쿠폰 번호를 입력해 주세요.');
+    const matches = await getDocs(query(collection(db, 'coupons'), where('serialNumber', '==', serialNumber)));
+    if (matches.empty) throw new Error('존재하지 않는 쿠폰 번호입니다.');
+    const couponRef = matches.docs[0].ref;
+    const userCouponRef = doc(db, 'users', student.studentId, 'coupons', couponRef.id);
+    await runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(couponRef);
+      if (!snapshot.exists()) throw new Error('존재하지 않는 쿠폰입니다.');
+      const data = snapshot.data();
+      if (data.status !== 'active' || data.ownerUid) throw new Error('이미 등록되었거나 사용할 수 없는 쿠폰입니다.');
+      const expiresAt = asDate(data.expiresAt);
+      if (expiresAt < new Date()) { transaction.update(couponRef, { status: 'expired', updatedAt: serverTimestamp() }); throw new Error('만료된 쿠폰입니다.'); }
+      const couponData = { couponId: couponRef.id, serialNumber, initialAmount: Number(data.initialAmount ?? 0), currentBalance: Number(data.currentBalance ?? data.initialAmount ?? 0), expiresAt: data.expiresAt, isSplitable: data.isSplitable === true, status: 'registered', registeredAt: serverTimestamp(), updatedAt: serverTimestamp() };
+      transaction.update(couponRef, { status: 'registered', ownerUid: student.studentId, registeredAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      transaction.set(userCouponRef, couponData);
+    });
+  };
+
+  const useCoupon = async (coupon: Coupon, items: CouponCartItem[]) => {
+    if (!student) throw new Error('먼저 로그인해 주세요.');
+    if (!items.length || items.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1)) throw new Error('선택한 상품과 수량을 확인해 주세요.');
+    const couponRef = doc(db, 'coupons', coupon.id);
+    const userCouponRef = doc(db, 'users', student.studentId, 'coupons', coupon.id);
+    const transactionRef = doc(collection(db, 'couponTransactions'));
+    await runTransaction(db, async (transaction) => {
+      const productRefs = items.map((item) => doc(db, 'products', item.product.id));
+      const [snapshot, ...productSnapshots] = await Promise.all([transaction.get(couponRef), ...productRefs.map((productRef) => transaction.get(productRef))]);
+      if (!snapshot.exists()) throw new Error('쿠폰 정보를 찾을 수 없습니다.');
+      const purchaseItems = productSnapshots.map((productSnapshot, index) => {
+        const item = items[index];
+        if (!productSnapshot.exists() || productSnapshot.data().isActive === false) throw new Error(`${item.product.name}은(는) 현재 판매하지 않는 상품입니다.`);
+        const currentStock = Number(productSnapshot.data().currentStock ?? 0);
+        if (currentStock < item.quantity) throw new Error(`${String(productSnapshot.data().name ?? item.product.name)} 재고가 부족합니다.`);
+        const unitPrice = Number(productSnapshot.data().price ?? 0);
+        if (!Number.isFinite(unitPrice) || unitPrice < 1) throw new Error('상품 가격 정보를 확인해 주세요.');
+        return { productRef: productRefs[index], productSnapshot, productId: productRefs[index].id, productName: String(productSnapshot.data().name ?? item.product.name), quantity: item.quantity, unitPrice, totalPrice: unitPrice * item.quantity, currentStock };
+      });
+      const data = snapshot.data(); const balance = Number(data.currentBalance ?? 0); const totalPrice = purchaseItems.reduce((sum, item) => sum + item.totalPrice, 0);
+      if (data.status !== 'registered' || data.ownerUid !== student.studentId) throw new Error('현재 사용할 수 없는 쿠폰입니다.');
+      if (asDate(data.expiresAt) < new Date()) { transaction.update(couponRef, { status: 'expired', updatedAt: serverTimestamp() }); transaction.update(userCouponRef, { status: 'expired', updatedAt: serverTimestamp() }); throw new Error('만료된 쿠폰입니다.'); }
+      if (totalPrice > balance) throw new Error('쿠폰 잔액이 부족합니다!');
+      const balanceAfter = balance - totalPrice; const isUsed = balanceAfter === 0;
+      transaction.update(couponRef, { currentBalance: balanceAfter, status: isUsed ? 'used' : 'registered', ...(isUsed ? { usedAt: serverTimestamp(), disabled: true } : {}), updatedAt: serverTimestamp() });
+      transaction.update(userCouponRef, { currentBalance: balanceAfter, status: isUsed ? 'used' : 'registered', updatedAt: serverTimestamp() });
+      purchaseItems.forEach((item) => transaction.update(item.productRef, { currentStock: item.currentStock - item.quantity, updatedAt: serverTimestamp() }));
+      transaction.set(transactionRef, { couponId: coupon.id, ownerUid: student.studentId, serialNumber: String(data.serialNumber ?? coupon.serialNumber), items: purchaseItems.map(({ productId, productName, quantity, unitPrice, totalPrice: itemTotalPrice }) => ({ productId, productName, quantity, unitPrice, totalPrice: itemTotalPrice })), totalPrice, balanceBefore: balance, balanceAfter, createdAt: serverTimestamp() });
+    });
+  };
+
+  const dismissUsedCoupon = async (coupon: Coupon) => {
+    if (!student || coupon.status !== 'used') throw new Error('다 사용한 쿠폰만 삭제할 수 있습니다.');
+    await updateDoc(doc(db, 'coupons', coupon.id), { hiddenBy: arrayUnion(student.studentId), updatedAt: serverTimestamp() });
+  };
+
+  const createCoupon = async (amount: number, expiresAt: string) => {
+    if (!Number.isInteger(amount) || amount < 1 || !expiresAt) throw new Error('쿠폰 금액과 만료일을 올바르게 입력해 주세요.');
+    const serialNumber = `MAE-${Array.from(crypto.getRandomValues(new Uint32Array(2)), (value) => value.toString(36).toUpperCase().padStart(4, '0').slice(-4)).join('-')}`;
+    await setDoc(doc(collection(db, 'coupons')), { serialNumber, initialAmount: amount, currentBalance: amount, expiresAt: Timestamp.fromDate(new Date(`${expiresAt}T23:59:59`)), isSplitable: true, status: 'active', ownerUid: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   };
 
   const addProduct = async (input: ProductInput) => {
@@ -302,6 +421,6 @@ export default function App() {
     return top ? { name: top[0], count: top[1] } : undefined;
   }, [myLogs]);
 
-  if (isAdmin) return <AdminDashboard products={products} stats={stats} onAddProduct={addProduct} onRestock={restock} onUpdateProduct={updateProduct} onDeleteProduct={deleteProduct} onExit={() => setIsAdmin(false)} />;
-  return <main className="app-shell"><section className="app-content">{tab === 'home' && <Home student={student} recentLog={myLogs[0]} frequentProduct={frequentProduct} recommendations={recommendations} onLogin={login} onLogout={logout} onChangePassword={changePassword} onAddRecommendation={addRecommendation} onToggleRecommendation={toggleRecommendation} onOpenPurchase={() => setTab('purchase')} onEnterAdmin={() => setIsAdmin(true)} />}{tab === 'purchase' && <Scanner student={student} products={products} onSave={savePurchase} onToggleLike={toggleLike} />}{tab === 'logs' && <MyLogs logs={myLogs} isLoading={false} />}</section><BottomNav activeTab={tab} onChange={setTab} /></main>;
+  if (isAdmin) return <AdminDashboard products={products} stats={stats} coupons={allCoupons} couponTransactions={couponTransactions} recommendations={recommendations} onCreateCoupon={createCoupon} onAddProduct={addProduct} onRestock={restock} onUpdateProduct={updateProduct} onDeleteProduct={deleteProduct} onExit={() => setIsAdmin(false)} />;
+  return <main className="app-shell"><section className="app-content">{tab === 'home' && <Home student={student} recentLog={myLogs[0]} frequentProduct={frequentProduct} recommendations={recommendations} onLogin={login} onLogout={logout} onChangePassword={changePassword} onAddRecommendation={addRecommendation} onToggleRecommendation={toggleRecommendation} onOpenPurchase={() => setTab('purchase')} onEnterAdmin={() => setIsAdmin(true)} />}{tab === 'purchase' && <Scanner student={student} products={products} onSave={savePurchase} onToggleLike={toggleLike} />}{tab === 'coupons' && <Coupons student={student} coupons={myCoupons} products={products} onRegister={registerCoupon} onUse={useCoupon} onDismissUsed={dismissUsedCoupon} />}{tab === 'logs' && <MyLogs logs={myLogs} isLoading={false} />}</section><BottomNav activeTab={tab} onChange={setTab} /></main>;
 }

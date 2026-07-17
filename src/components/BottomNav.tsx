@@ -1,11 +1,12 @@
-export type Tab = 'home' | 'purchase' | 'logs';
+export type Tab = 'home' | 'purchase' | 'coupons' | 'logs';
 
 interface BottomNavProps { activeTab: Tab; onChange: (tab: Tab) => void; }
 
 const tabs: Array<{ id: Tab; icon: string; label: string }> = [
-  { id: 'home', icon: '⌂', label: '홈' },
+  { id: 'home', icon: '🏠', label: '홈' },
   { id: 'purchase', icon: '🛒', label: '구매' },
-  { id: 'logs', icon: '◷', label: '내 기록' },
+  { id: 'coupons', icon: '🎟️', label: '쿠폰' },
+  { id: 'logs', icon: '📋', label: '내 기록' },
 ];
 
 export default function BottomNav({ activeTab, onChange }: BottomNavProps) {
