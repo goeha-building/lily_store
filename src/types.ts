@@ -30,6 +30,7 @@ export interface DashboardStats {
   todayPurchaseCount: number;
   weeklyPurchaseCount: number;
   topProducts: Array<{ name: string; count: number }>;
+  categoryCounts: Array<{ category: string; count: number }>;
 }
 
 export interface TuckShopProduct {
