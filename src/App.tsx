@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   arrayRemove,
   arrayUnion,
@@ -98,6 +98,7 @@ export default function App() {
   const [allLogs, setAllLogs] = useState<PurchaseLog[]>([]);
   const [userCount, setUserCount] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
+  const stockSnapshot = useRef<Record<string, number>>({});
 
   useEffect(() => {
     const savedStudentId = localStorage.getItem(SESSION_KEY);
@@ -121,6 +122,22 @@ export default function App() {
       .map((item) => toProduct(item.id, item.data()))
       .sort((a, b) => a.name.localeCompare(b.name, 'ko')));
   }), []);
+
+  useEffect(() => {
+    const previous = stockSnapshot.current;
+    const current = Object.fromEntries(products.map((product) => [product.id, product.currentStock]));
+    if (isAdmin && 'Notification' in window && Notification.permission === 'granted') {
+      products.filter((product) => previous[product.id] > 0 && product.currentStock < 1).forEach((product) => {
+        const title = '상품 품절 알림'; const options = { body: `${product.name} 상품의 재고가 모두 소진되었습니다.`, icon: '/pwa-192x192.png', tag: `sold-out-${product.id}` };
+        void navigator.serviceWorker?.ready.then((registration) => registration.showNotification(title, options)).catch(() => new Notification(title, options));
+      });
+    }
+    stockSnapshot.current = current;
+  }, [products, isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin && 'Notification' in window && Notification.permission === 'default') void Notification.requestPermission();
+  }, [isAdmin]);
 
   useEffect(() => onSnapshot(collection(db, 'recommendations'), (snapshot) => {
     setRecommendations(snapshot.docs
@@ -196,6 +213,7 @@ export default function App() {
         if (!current.exists()) {
           transaction.set(userRef, {
             passwordHash,
+           
             mustChangePassword: true,
             createdAt: serverTimestamp(),
           });
@@ -278,24 +296,34 @@ export default function App() {
       const productRefs = items.map((item) => doc(db, 'products', item.product.id));
       const [snapshot, ...productSnapshots] = await Promise.all([transaction.get(couponRef), ...productRefs.map((productRef) => transaction.get(productRef))]);
       if (!snapshot.exists()) throw new Error('쿠폰 정보를 찾을 수 없습니다.');
+      
       const purchaseItems = productSnapshots.map((productSnapshot, index) => {
         const item = items[index];
-        if (!productSnapshot.exists() || productSnapshot.data().isActive === false) throw new Error(`${item.product.name}은(는) 현재 판매하지 않는 상품입니다.`);
-        const currentStock = Number(productSnapshot.data().currentStock ?? 0);
-        if (currentStock < item.quantity) throw new Error(`${String(productSnapshot.data().name ?? item.product.name)} 재고가 부족합니다.`);
-        const unitPrice = Number(productSnapshot.data().price ?? 0);
+        if (!productSnapshot.exists()) throw new Error(`${item.product.name} 상품을 찾을 수 없습니다.`);
+        
+        // 데이터 안전하게 캐스팅하여 런타임 에러 방지
+        const pData = productSnapshot.data() as Record<string, any>;
+        if (pData.isActive === false) throw new Error(`${item.product.name}은(는) 현재 판매하지 않는 상품입니다.`);
+        const currentStock = Number(pData.currentStock ?? 0);
+        if (currentStock < item.quantity) throw new Error(`${String(pData.name ?? item.product.name)} 재고가 부족합니다.`);
+        const unitPrice = Number(pData.price ?? 0);
         if (!Number.isFinite(unitPrice) || unitPrice < 1) throw new Error('상품 가격 정보를 확인해 주세요.');
-        return { productRef: productRefs[index], productSnapshot, productId: productRefs[index].id, productName: String(productSnapshot.data().name ?? item.product.name), quantity: item.quantity, unitPrice, totalPrice: unitPrice * item.quantity, currentStock };
+        
+        return { productRef: productRefs[index], productSnapshot, productId: productRefs[index].id, productName: String(pData.name ?? item.product.name), quantity: item.quantity, unitPrice, totalPrice: unitPrice * item.quantity, currentStock };
       });
-      const data = snapshot.data(); const balance = Number(data.currentBalance ?? 0); const totalPrice = purchaseItems.reduce((sum, item) => sum + item.totalPrice, 0);
-      if (data.status !== 'registered' || data.ownerUid !== student.studentId) throw new Error('현재 사용할 수 없는 쿠폰입니다.');
-      if (asDate(data.expiresAt) < new Date()) { transaction.update(couponRef, { status: 'expired', updatedAt: serverTimestamp() }); transaction.update(userCouponRef, { status: 'expired', updatedAt: serverTimestamp() }); throw new Error('만료된 쿠폰입니다.'); }
+      
+      const cData = snapshot.data() as Record<string, any>;
+      const balance = Number(cData.currentBalance ?? 0); 
+      const totalPrice = purchaseItems.reduce((sum, item) => sum + item.totalPrice, 0);
+      
+      if (cData.status !== 'registered' || cData.ownerUid !== student.studentId) throw new Error('현재 사용할 수 없는 쿠폰입니다.');
+      if (asDate(cData.expiresAt) < new Date()) { transaction.update(couponRef, { status: 'expired', updatedAt: serverTimestamp() }); transaction.update(userCouponRef, { status: 'expired', updatedAt: serverTimestamp() }); throw new Error('만료된 쿠폰입니다.'); }
       if (totalPrice > balance) throw new Error('쿠폰 잔액이 부족합니다!');
       const balanceAfter = balance - totalPrice; const isUsed = balanceAfter === 0;
       transaction.update(couponRef, { currentBalance: balanceAfter, status: isUsed ? 'used' : 'registered', ...(isUsed ? { usedAt: serverTimestamp(), disabled: true } : {}), updatedAt: serverTimestamp() });
       transaction.update(userCouponRef, { currentBalance: balanceAfter, status: isUsed ? 'used' : 'registered', updatedAt: serverTimestamp() });
       purchaseItems.forEach((item) => transaction.update(item.productRef, { currentStock: item.currentStock - item.quantity, updatedAt: serverTimestamp() }));
-      transaction.set(transactionRef, { couponId: coupon.id, ownerUid: student.studentId, serialNumber: String(data.serialNumber ?? coupon.serialNumber), items: purchaseItems.map(({ productId, productName, quantity, unitPrice, totalPrice: itemTotalPrice }) => ({ productId, productName, quantity, unitPrice, totalPrice: itemTotalPrice })), totalPrice, balanceBefore: balance, balanceAfter, createdAt: serverTimestamp() });
+      transaction.set(transactionRef, { couponId: coupon.id, ownerUid: student.studentId, serialNumber: String(cData.serialNumber ?? coupon.serialNumber), items: purchaseItems.map(({ productId, productName, quantity, unitPrice, totalPrice: itemTotalPrice }) => ({ productId, productName, quantity, unitPrice, totalPrice: itemTotalPrice })), totalPrice, balanceBefore: balance, balanceAfter, createdAt: serverTimestamp() });
     });
   };
 
@@ -412,6 +440,31 @@ export default function App() {
     return top ? { name: top[0], count: top[1] } : undefined;
   }, [myLogs]);
 
-  if (isAdmin) return <AdminDashboard products={products} stats={stats} coupons={allCoupons} recommendations={recommendations} onCreateCoupon={createCoupon} onAddProduct={addProduct} onRestock={restock} onUpdateProduct={updateProduct} onDeleteProduct={deleteProduct} onCompleteRecommendation={completeRecommendation} onDeleteRecommendation={deleteRecommendation} onExit={() => setIsAdmin(false)} />;
-  return <main className="app-shell"><section className="app-content">{tab === 'home' && <Home student={student} recentLog={myLogs[0]} frequentProduct={frequentProduct} recommendations={recommendations} onLogin={login} onLogout={logout} onChangePassword={changePassword} onAddRecommendation={addRecommendation} onToggleRecommendation={toggleRecommendation} onOpenPurchase={() => setTab('purchase')} onEnterAdmin={() => setIsAdmin(true)} />}{tab === 'purchase' && <Scanner student={student} products={products} onSave={savePurchase} onToggleLike={toggleLike} />}{tab === 'coupons' && <Coupons student={student} coupons={myCoupons} products={products} onRegister={registerCoupon} onUse={useCoupon} onDismissUsed={dismissUsedCoupon} />}{tab === 'logs' && <MyLogs logs={myLogs} isLoading={false} />}</section><BottomNav activeTab={tab} onChange={setTab} /></main>;
+  if (isAdmin) return <AdminDashboard products={products} stats={stats} coupons={allCoupons} recommendations={recommendations} allLogs={allLogs} onCreateCoupon={createCoupon} onAddProduct={addProduct} onRestock={restock} onUpdateProduct={updateProduct} onDeleteProduct={deleteProduct} onCompleteRecommendation={completeRecommendation} onDeleteRecommendation={deleteRecommendation} onExit={() => setIsAdmin(false)} />;
+  
+  return (
+    <main className="app-shell" style={{ marginTop: '28px' }}>
+      <section className="app-content">
+        {tab === 'home' && (
+          <Home 
+            student={student} 
+            recentLog={myLogs[0]} 
+            frequentProduct={frequentProduct} 
+            recommendations={recommendations} 
+            onLogin={login} 
+            onLogout={logout} 
+            onChangePassword={changePassword} 
+            onAddRecommendation={addRecommendation} 
+            onToggleRecommendation={toggleRecommendation} 
+            onOpenPurchase={() => setTab('purchase')} 
+            onEnterAdmin={() => setIsAdmin(true)} 
+          />
+        )}
+        {tab === 'purchase' && <Scanner student={student} products={products} onSave={savePurchase} onToggleLike={toggleLike} />}
+        {tab === 'coupons' && <Coupons student={student} coupons={myCoupons} products={products} onRegister={registerCoupon} onUse={useCoupon} onDismissUsed={dismissUsedCoupon} />}
+        {tab === 'logs' && <MyLogs logs={myLogs} isLoading={false} />}
+      </section>
+      <BottomNav activeTab={tab} onChange={setTab} />
+    </main>
+  );
 }

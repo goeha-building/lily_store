@@ -1,2 +1,4 @@
 .product-result > button:disabled { cursor: not-allowed; opacity: .64; background: #f0f2f3; }
 .product-result .sold-out { color: #d15b4a; font-weight: 900; }
+.product-result.sold-out-product { border-color: #e76b6b; background: #fff0f0; box-shadow: inset 0 0 0 1px #ffd0d0; }
+.product-result.sold-out-product > button:first-child { background: #fff0f0; }
