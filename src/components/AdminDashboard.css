@@ -343,3 +343,26 @@
   .all-purchase-logs time { grid-column: 2; grid-row: 1; }
   .category-pie-card { grid-template-columns: 120px 1fr; }
 }
+.recommendation-admin {
+  margin-bottom: 32px !important; /* 아래쪽 박스들과 확실하게 32px 격리 */
+}
+
+/* 2. 대시보드 메인 레이아웃 내부에 존재하는 큰 자식 박스들 간격 벌리기 */
+.analytics-dashboard > section,
+.analytics-dashboard > div,
+.admin-tab-content > section,
+.admin-tab-content > div {
+  margin-bottom: 28px !important;
+}
+
+/* 3. 쿠폰 발급 버튼과 만료일 입력창 사이 간격 벌리기 */
+.coupon-register button,
+form button.primary-button {
+  margin-top: 20px !important;    /* ✅ 버튼 위쪽에 여백을 주어 만료일 창과 격리 */
+  margin-bottom: 0px !important;   /* 버튼 아래쪽 마진은 리셋 */
+}
+
+/* 4. 리스트 헤딩과 그 위 영역(폼) 사이의 간격 균형 맞추기 */
+.list-heading {
+  margin-top: 32px !important;    /* ✅ 버튼이 위로 올라간 만큼 아래쪽 리스트 제목과의 간격 확보 */
+}

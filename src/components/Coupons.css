@@ -22,3 +22,38 @@
 .coupon-cart li { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; border-radius: 10px; padding: 9px 10px; background: #f5fcfd; color: #286a82; font-size: 12px; }
 .coupon-cart li b { color: #197e98; }
 .coupon-cart li button { border: 0; border-radius: 50%; width: 23px; height: 23px; background: #ffe8e2; color: #b85840; font-size: 17px; line-height: 1; }
+.coupon-sort {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 12px;
+  padding: 4px;
+  background: #f0f9fc;
+  border-radius: 12px;
+  border: 1px solid #e1f2f6;
+}
+
+.coupon-sort button {
+  flex: 1;
+  border: none;
+  border-radius: 9px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #7293a0;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* 활성화(클릭)되었을 때의 쫀득하고 예쁜 스타일 */
+.coupon-sort button.active {
+  color: #197e98;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(35, 106, 132, 0.08);
+}
+
+/* 마우스 올렸을 때 살짝 흐려지는 효과 (모바일 터치 시에도 자연스러움) */
+.coupon-sort button:not(.active):hover {
+  color: #4a7485;
+  background: rgba(255, 255, 255, 0.4);
+}
