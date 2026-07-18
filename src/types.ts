@@ -23,6 +23,7 @@ export interface Recommendation {
   name: string;
   supporters: string[];
   createdAt: Date;
+  status?: 'pending' | 'completed';
 }
 
 export interface DashboardStats {
@@ -71,6 +72,7 @@ export interface Coupon {
   status: CouponStatus;
   ownerUid?: string | null;
   registeredAt?: Date;
+  createdAt?: Date;
 }
 
 export interface CouponTransaction {

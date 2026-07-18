@@ -1,5 +1,5 @@
 const CACHE_NAME = 'tuck-shop-log-v1';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/favicon.svg'];
+const APP_SHELL = ['/', '/manifest.webmanifest', '/favicon.svg', '/pwa-192x192.png', '/pwa-512x512.png', '/apple-touch-icon.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

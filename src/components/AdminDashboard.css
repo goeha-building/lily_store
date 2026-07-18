@@ -102,6 +102,15 @@
 
 .recommendation-admin { margin-top: 20px; }
 
+.list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.list-heading h2, .list-heading h3 { margin: 16px 0 6px; color: #216b85; font-size: 16px; }
+.compact-pager { display: inline-flex; align-items: center; gap: 7px; color: #35738a; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.compact-pager button { width: 25px; height: 25px; border: 1px solid #9eddeb; border-radius: 8px; background: #fff; color: #216b85; font-size: 18px; line-height: 1; }
+.compact-pager button:disabled { opacity: .35; }
+.recommendation-actions { display: flex; align-items: center; gap: 6px; }
+.recommendation-actions button { border: 0; border-radius: 9px; padding: 7px 9px; background: #bdeed1; color: #28733e; font-size: 11px; font-weight: 800; }
+.recommendation-actions button:last-child { background: #ffe5df; color: #a55448; }
+
 .admin-section-title {
   display: flex;
   align-items: center;

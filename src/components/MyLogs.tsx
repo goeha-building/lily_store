@@ -1,13 +1,12 @@
+import { useMemo, useState } from 'react';
 import type { PurchaseLog } from '../types';
-
+type Period = 'day' | 'week' | 'month';
+const labels: Record<Period, string> = { day: '일', week: '주', month: '월' };
+function periodStart(date: Date, period: Period) { const result = new Date(date); result.setHours(0, 0, 0, 0); if (period === 'week') result.setDate(result.getDate() - ((result.getDay() + 6) % 7)); if (period === 'month') result.setDate(1); return result; }
+function label(date: Date, period: Period) { const start = periodStart(date, period); return period === 'month' ? `${start.getFullYear()}.${String(start.getMonth() + 1).padStart(2, '0')}` : period === 'week' ? `${start.getMonth() + 1}/${start.getDate()} 주` : `${start.getMonth() + 1}/${start.getDate()}일`; }
 export default function MyLogs({ logs, isLoading }: { logs: PurchaseLog[]; isLoading: boolean }) {
-  const categories = logs.reduce<Record<string, number>>((result, log) => { result[log.category] = (result[log.category] ?? 0) + 1; return result; }, {});
-  const total = logs.length || 1;
-  const colors = ['#35bced', '#79c843', '#ffc94d', '#ff8d69', '#a88cf2'];
-  let cursor = 0;
-  const gradient = Object.entries(categories).map(([, count], index) => { const start = cursor; cursor += count / total * 100; return `${colors[index % colors.length]} ${start}% ${cursor}%`; }).join(', ') || '#d9f2fb 0 100%';
-  return <div className="page-stack"><header className="page-header"><p className="eyebrow">MY SNACK REPORT</p><h1>나의 구매 기록</h1><p>총 {logs.length}개의 간식을 기록했어요.</p></header>
-    <section className="glass-card chart-card"><div className="donut" style={{ background: `conic-gradient(${gradient})` }}><span>{logs.length}<small>개</small></span></div><div className="legend">{Object.entries(categories).length ? Object.entries(categories).map(([category, count], index) => <p key={category}><i style={{ backgroundColor: colors[index % colors.length] }} />{category}<b>{count}개</b></p>) : <p>스캔 후 카테고리 비율이 표시됩니다.</p>}</div></section>
-    <section className="glass-card log-card"><h2>구매 목록</h2>{isLoading ? <p>기록을 불러오는 중…</p> : logs.length ? <ul className="log-list">{logs.map((log) => <li key={log.id}><span className="product-dot">✦</span><div><strong>{log.productName}</strong><p>{log.category}</p></div><time>{log.timestamp.toLocaleDateString('ko-KR')}<br />{log.timestamp.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</time></li>)}</ul> : <p className="empty-message">아직 구매 기록이 없어요.</p>}</section>
-  </div>;
+  const [period, setPeriod] = useState<Period>('day');
+  const rows = useMemo(() => Object.values(logs.reduce<Record<string, { label: string; date: Date; count: number; total: number }>>((result, log) => { const start = periodStart(log.timestamp, period); const id = start.toISOString(); const current = result[id] ?? { label: label(log.timestamp, period), date: start, count: 0, total: 0 }; current.count += 1; current.total += log.price ?? 0; result[id] = current; return result; }, {})).sort((a, b) => b.date.getTime() - a.date.getTime()), [logs, period]);
+  const totalAmount = logs.reduce((sum, log) => sum + (log.price ?? 0), 0);
+  return <div className="page-stack"><header className="page-header"><p className="eyebrow">MY SNACK REPORT</p><h1>나의 구매 기록</h1><p>총 {logs.length}회 · {totalAmount.toLocaleString()}원 사용</p></header><section className="glass-card purchase-analysis"><div className="period-tabs">{(['day', 'week', 'month'] as Period[]).map((item) => <button key={item} className={period === item ? 'active' : ''} onClick={() => setPeriod(item)}>{labels[item]}별</button>)}</div><div className="analysis-head"><span>{labels[period]}별 구매량</span><span>구매 금액</span></div>{isLoading ? <p>기록을 불러오는 중...</p> : rows.length ? <ul>{rows.map((row) => <li key={row.date.toISOString()}><strong>{row.label}</strong><span>{row.count}개</span><b>{row.total.toLocaleString()}원</b></li>)}</ul> : <p className="empty-message">아직 구매 기록이 없어요.</p>}</section><section className="glass-card log-card"><h2>최근 구매 목록</h2>{logs.length ? <ul className="log-list">{logs.map((log) => <li key={log.id}><span className="product-dot">●</span><div><strong>{log.productName}</strong><p>{log.category} · {(log.price ?? 0).toLocaleString()}원</p></div><time>{log.timestamp.toLocaleDateString('ko-KR')}<br />{log.timestamp.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</time></li>)}</ul> : <p className="empty-message">아직 구매 기록이 없어요.</p>}</section></div>;
 }

@@ -33,7 +33,6 @@ import type {
   Student,
   TuckShopProduct,
   Coupon,
-  CouponTransaction,
 } from './types';
 import { hashPassword, normalizeProductText, productSearchTerms } from './utils';
 
@@ -84,18 +83,7 @@ function toCoupon(id: string, data: Record<string, unknown>): Coupon {
     status: (data.status ?? 'active') as Coupon['status'],
     ownerUid: typeof data.ownerUid === 'string' ? data.ownerUid : null,
     registeredAt: data.registeredAt ? asDate(data.registeredAt) : undefined,
-  };
-}
-
-function toCouponTransaction(id: string, data: Record<string, unknown>): CouponTransaction {
-  return {
-    id,
-    couponId: String(data.couponId ?? ''),
-    serialNumber: String(data.serialNumber ?? ''),
-    totalPrice: Number(data.totalPrice ?? 0),
-    balanceAfter: Number(data.balanceAfter ?? 0),
-    createdAt: asDate(data.createdAt),
-    items: Array.isArray(data.items) ? data.items.map((item) => ({ productName: String(item?.productName ?? ''), quantity: Number(item?.quantity ?? 0), totalPrice: Number(item?.totalPrice ?? 0) })) : [],
+    createdAt: data.createdAt ? asDate(data.createdAt) : undefined,
   };
 }
 
@@ -107,7 +95,6 @@ export default function App() {
   const [myLogs, setMyLogs] = useState<PurchaseLog[]>([]);
   const [myCoupons, setMyCoupons] = useState<Coupon[]>([]);
   const [allCoupons, setAllCoupons] = useState<Coupon[]>([]);
-  const [couponTransactions, setCouponTransactions] = useState<CouponTransaction[]>([]);
   const [allLogs, setAllLogs] = useState<PurchaseLog[]>([]);
   const [userCount, setUserCount] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -137,11 +124,12 @@ export default function App() {
 
   useEffect(() => onSnapshot(collection(db, 'recommendations'), (snapshot) => {
     setRecommendations(snapshot.docs
-      .map((item) => ({
+      .map<Recommendation>((item) => ({
         id: item.id,
         name: String(item.data().name ?? ''),
         supporters: Array.isArray(item.data().supporters) ? item.data().supporters.map(String) : [],
         createdAt: asDate(item.data().createdAt),
+        status: item.data().status === 'completed' ? 'completed' : 'pending',
       }))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
   }), []);
@@ -189,13 +177,10 @@ export default function App() {
   }, [isAdmin]);
 
   useEffect(() => {
-    if (!isAdmin) { setAllCoupons([]); setCouponTransactions([]); return; }
-    return onSnapshot(collection(db, 'coupons'), (snapshot) => setAllCoupons(snapshot.docs.map((item) => toCoupon(item.id, item.data()))));
-  }, [isAdmin]);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    return onSnapshot(collection(db, 'couponTransactions'), (snapshot) => setCouponTransactions(snapshot.docs.map((item) => toCouponTransaction(item.id, item.data())).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())));
+    if (!isAdmin) { setAllCoupons([]); return; }
+    return onSnapshot(collection(db, 'coupons'), (snapshot) => setAllCoupons(snapshot.docs
+      .map((item) => toCoupon(item.id, item.data()))
+      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))));
   }, [isAdmin]);
 
   const login = async (studentId: string, password: string) => {
@@ -394,6 +379,12 @@ export default function App() {
     });
   };
 
+  const completeRecommendation = async (item: Recommendation) => {
+    await updateDoc(doc(db, 'recommendations', item.id), { status: 'completed', completedAt: serverTimestamp() });
+  };
+
+  const deleteRecommendation = async (id: string) => deleteDoc(doc(db, 'recommendations', id));
+
   const stats = useMemo<DashboardStats>(() => {
     const productCounts: Record<string, number> = {};
     const categoryCounts: Record<string, number> = {};
@@ -421,6 +412,6 @@ export default function App() {
     return top ? { name: top[0], count: top[1] } : undefined;
   }, [myLogs]);
 
-  if (isAdmin) return <AdminDashboard products={products} stats={stats} coupons={allCoupons} couponTransactions={couponTransactions} recommendations={recommendations} onCreateCoupon={createCoupon} onAddProduct={addProduct} onRestock={restock} onUpdateProduct={updateProduct} onDeleteProduct={deleteProduct} onExit={() => setIsAdmin(false)} />;
+  if (isAdmin) return <AdminDashboard products={products} stats={stats} coupons={allCoupons} recommendations={recommendations} onCreateCoupon={createCoupon} onAddProduct={addProduct} onRestock={restock} onUpdateProduct={updateProduct} onDeleteProduct={deleteProduct} onCompleteRecommendation={completeRecommendation} onDeleteRecommendation={deleteRecommendation} onExit={() => setIsAdmin(false)} />;
   return <main className="app-shell"><section className="app-content">{tab === 'home' && <Home student={student} recentLog={myLogs[0]} frequentProduct={frequentProduct} recommendations={recommendations} onLogin={login} onLogout={logout} onChangePassword={changePassword} onAddRecommendation={addRecommendation} onToggleRecommendation={toggleRecommendation} onOpenPurchase={() => setTab('purchase')} onEnterAdmin={() => setIsAdmin(true)} />}{tab === 'purchase' && <Scanner student={student} products={products} onSave={savePurchase} onToggleLike={toggleLike} />}{tab === 'coupons' && <Coupons student={student} coupons={myCoupons} products={products} onRegister={registerCoupon} onUse={useCoupon} onDismissUsed={dismissUsedCoupon} />}{tab === 'logs' && <MyLogs logs={myLogs} isLoading={false} />}</section><BottomNav activeTab={tab} onChange={setTab} /></main>;
 }
